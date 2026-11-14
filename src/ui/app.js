@@ -161,9 +161,17 @@ function detalhe(s) {
     + cel((s.edicoes_mantidas || []).length + (s.edicoes_mescladas || []).length + (s.traducoes_brasileiras_preservadas || []).length, 'Preservadas', 'verde')
     + cel(s.base_oficial ? conf.length : (s.arquivos_sensiveis_para_revisao || []).length, s.base_oficial ? 'Conflitos' : 'Para revisar', (s.base_oficial ? conf.length : (s.arquivos_sensiveis_para_revisao || []).length) ? 'vermelho' : '')
     + cel(falt, 'Textos sem tradução', falt ? 'trigo' : '');
+  // conflito com os blocos: como era, como voce deixou, como o autor deixou
+  const lado = (rotulo, cls, l) => `<div class="lado ${cls}"><span>${rotulo}</span><pre>${l.length ? l.map(esc).join('\n') : '<i>(nada: trecho removido ou inexistente)</i>'}</pre></div>`;
+  const blocos = c => !c.blocos ? '' : c.blocos.map((b, i) => `<div class="bloco"><small>Bloco ${i + 1} de ${c.totalBlocos}</small>
+      ${lado(`Original · linha ${b.linhaOriginal}`, 'orig', b.original)}${lado(`Você · linha ${b.linhaSua} do seu arquivo`, 'seu', b.seu)}${lado(`Autor · linha ${b.linhaAutor} da versão nova`, 'autor', b.autor)}</div>`).join('')
+    + (c.totalBlocos > c.blocos.length ? `<small>Mostrando ${c.blocos.length} de ${c.totalBlocos} blocos; o resto está no conflitos.txt da pasta da prévia.</small>` : '');
+  const secConf = (titulo, lista) => lista.length ? `<details class="det-sec" open><summary>${titulo} <b>${lista.length}</b></summary>${lista.map(c =>
+    `<details class="conf" ${lista.length === 1 ? 'open' : ''}><summary><code>${esc(c.arquivo)}</code> <small>— ${esc(c.motivo)}${c.totalBlocos ? ` · ${c.totalBlocos} bloco(s)` : ''}</small></summary>${blocos(c)}</details>`).join('')}</details>` : '';
   const sec = (titulo, lista, aberto = false) => lista && lista.length ? `<details class="det-sec" ${aberto ? 'open' : ''}><summary>${titulo} <b>${lista.length}</b></summary><ul>${lista.map(i => `<li>${i}</li>`).join('')}</ul></details>` : '';
   $('detSecoes').innerHTML = [
-    sec('Conflitos: ficou a versão do autor, a sua está na pasta suas_versoes', conf.map(c => `${esc(c.arquivo)} <small>— ${esc(c.motivo)}</small>`), true),
+    secConf('Conflitos: ficou a versão do autor, a sua está na pasta suas_versoes', conf),
+    secConf('Tradução em que você e o autor mexeram no mesmo trecho: ficou a sua', s.conflitos_de_traducao || []),
     !s.base_oficial ? sec('Arquivos que mudaram e precisam de revisão', (s.arquivos_sensiveis_para_revisao || []).map(esc), true) : '',
     sec('Juntados automaticamente (sua edição + mudança do autor): teste no jogo', (s.edicoes_mescladas || []).map(esc), true),
     sec('Edições suas mantidas como estavam', (s.edicoes_mantidas || []).map(esc)),

@@ -35,6 +35,8 @@ const en = extra => `<l10n><texts><text name="a" text="A"/>${extra}</texts></l10
   assert.deepStrictEqual(r.suas_edicoes, { alterados: ['main.lua', 'outro.xml'], adicionados: ['l10n/l10n_br.xml', 'meu.lua'], removidos: ['apagado.txt'] });
   assert.deepStrictEqual(r.edicoes_mescladas, ['main.lua']); assert.deepStrictEqual(r.edicoes_mantidas, ['meu.lua']);
   assert.deepStrictEqual(r.conflitos_de_edicao.map(c => c.arquivo), ['outro.xml']);
+  assert.deepStrictEqual(r.conflitos_de_edicao[0].blocos, [{ linhaOriginal: 2, linhaSua: 2, linhaAutor: 2, original: ['1'], seu: ['MEU'], autor: ['AUTOR'] }]);
+  assert.ok(fs.readFileSync(path.join(r.pasta, 'conflitos.txt'), 'utf8').includes('VOCÊ (linha 2 do seu arquivo)'));
   assert.deepStrictEqual(r.traducoes_brasileiras_preservadas, ['l10n/l10n_br.xml']);
   assert.deepStrictEqual(r.traducoes_faltando.map(t => [t.arquivo, t.chaves]), [['l10n/l10n_br.xml', ['nova']]]);
   assert.strictEqual(r.status, 'REVISAO_OBRIGATORIA'); assert.ok(r.original_intacto);

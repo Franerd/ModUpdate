@@ -113,11 +113,24 @@ const EXT_MESCLAVEL = new Set(['.xml', '.lua', '.i3d', '.txt', '.md', '.json', '
 const ehTexto = (n, ...bufs) => EXT_MESCLAVEL.has(path.extname(n).toLowerCase()) && bufs.every(b => !b.includes(0));
 const linhas = b => b.toString('utf8').split(/(?<=\n)/);
 
-// Junta a sua edicao com a mudanca do autor, linha a linha. null = os dois mexeram no mesmo trecho.
+// Junta a sua edicao com a mudanca do autor, linha a linha.
+// Devolve { junto } quando da para juntar, ou { blocos } com cada trecho em que os dois mexeram:
+// como era no original, como voce deixou e como o autor deixou.
 function mesclar(seu, base, novo) {
-  const blocos = diff3Merge(linhas(seu), linhas(base), linhas(novo), { excludeFalseConflicts: true });
-  if (blocos.some(b => b.conflict)) return null;
-  return Buffer.from(blocos.map(b => b.ok.join('')).join(''), 'utf8');
+  const regioes = diff3Merge(linhas(seu), linhas(base), linhas(novo), { excludeFalseConflicts: true });
+  const conf = regioes.filter(b => b.conflict).map(b => b.conflict);
+  if (!conf.length) return { junto: Buffer.from(regioes.map(b => b.ok.join('')).join(''), 'utf8') };
+  const corta = l => l.slice(0, 80).map(x => x.replace(/\r?\n$/, '').slice(0, 400)).concat(l.length > 80 ? [`… (+${l.length - 80} linhas)`] : []);
+  return {
+    totalBlocos: conf.length,
+    blocos: conf.slice(0, 30).map(c => ({ linhaOriginal: c.oIndex + 1, linhaSua: c.aIndex + 1, linhaAutor: c.bIndex + 1, original: corta(c.o), seu: corta(c.a), autor: corta(c.b) })),
+  };
+}
+// versao em texto dos blocos em conflito, para ler fora do app
+function textoDosConflitos(lista) {
+  const sec = (t, l) => [`  ${t}`, ...(l.length ? l.map(x => '    ' + x) : ['    (nada: trecho removido ou inexistente)'])];
+  return lista.filter(c => c.blocos).flatMap(c => [`=== ${c.arquivo} ===`, c.motivo, '',
+    ...c.blocos.flatMap((b, i) => [`--- Bloco ${i + 1} de ${c.totalBlocos} ---`, ...sec(`ORIGINAL (linha ${b.linhaOriginal})`, b.original), ...sec(`VOCÊ (linha ${b.linhaSua} do seu arquivo)`, b.seu), ...sec(`AUTOR (linha ${b.linhaAutor} da versão nova)`, b.autor), '']), '']).join('\r\n');
 }
 
 // chaves de texto de um arquivo de traducao: <text name="x"> ou <e k="x">
@@ -199,7 +212,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
 
   etapa('Aplicando as suas edições sobre a versão nova');
   const preparado = new Map(novo);
-  const r = { suas: { alterados: [], adicionados: [], removidos: [] }, mantidas: [], mescladas: [], conflitos: [], brPreservadas: [], brConflitos: [] };
+  const r = { suas: { alterados: [], adicionados: [], removidos: [] }, mantidas: [], mescladas: [], conflitos: [], brPreservadas: [], brConflitos: [], brBlocos: [] };
   const acharNovo = n => [...preparado.keys()].find(x => x.toLowerCase() === n.toLowerCase());
   const guardarSua = async (n, d) => {   // copia da sua versao, para resolver o conflito a mao
     const alvo = mods.destino(pasta, 'suas_versoes', ...n.split('/'));
@@ -216,9 +229,12 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
       const b = base.itens.get(n), editado = !b || !b.equals(d);
       if (mods.RE_BR.test(n)) {
         // traducao: se o autor tambem mexeu no arquivo BR, tenta juntar (a sua + os textos novos dele); se nao der, fica a sua
-        const nv = novo.get(n), junto = editado && b && nv && !nv.equals(b) && !nv.equals(d) && ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
-        if (junto) { preparado.set(n, junto); r.mescladas.push(n); r.brPreservadas.push(n); }
-        else if (editado || !acharNovo(n)) usarBR(n, d);
+        const nv = novo.get(n), m = editado && b && nv && !nv.equals(b) && !nv.equals(d) && ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
+        if (m && m.junto) { preparado.set(n, m.junto); r.mescladas.push(n); r.brPreservadas.push(n); }
+        else if (editado || !acharNovo(n)) {
+          usarBR(n, d);
+          if (m) r.brBlocos.push({ arquivo: n, motivo: 'você e o autor mexeram no mesmo trecho da tradução (ficou a sua)', ...m });
+        }
         if (editado) r.suas[b ? 'alterados' : 'adicionados'].push(n);
         continue;
       }
@@ -232,9 +248,9 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
       } else if (!nv) { r.conflitos.push({ arquivo: n, motivo: 'você editou, mas o autor removeu este arquivo na versão nova' }); await guardarSua(n, d); }
       else if (nv.equals(b)) { preparado.set(n, d); r.mantidas.push(n); }       // so voce mexeu
       else {                                                    // os dois mexeram
-        const junto = ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
-        if (junto) { preparado.set(n, junto); r.mescladas.push(n); }
-        else { r.conflitos.push({ arquivo: n, motivo: ehTexto(n, d, b, nv) ? 'você e o autor mexeram no mesmo trecho' : 'você e o autor mexeram neste arquivo (não é texto, não dá para juntar)' }); await guardarSua(n, d); }
+        const m = ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
+        if (m && m.junto) { preparado.set(n, m.junto); r.mescladas.push(n); }
+        else { r.conflitos.push(m ? { arquivo: n, motivo: 'você e o autor mexeram no mesmo trecho', ...m } : { arquivo: n, motivo: 'você e o autor mexeram neste arquivo (não é texto, não dá para juntar)' }); await guardarSua(n, d); }
       }
     }
     for (const [n, b] of base.itens) if (!seu.has(n)) {         // arquivos que voce apagou
@@ -268,6 +284,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
     suas_edicoes: base ? r.suas : null,
     edicoes_mantidas: r.mantidas.sort(), edicoes_mescladas: r.mescladas.sort(), conflitos_de_edicao: r.conflitos,
     traducoes_brasileiras_preservadas: r.brPreservadas, traducoes_com_conflito_de_conteudo: r.brConflitos,
+    conflitos_de_traducao: r.brBlocos,
     traducoes_faltando: traducoesFaltando(preparado),
     preview: previa, preview_sha256: await sha256Arquivo(previa),
     comparacao_release: comparacaoRelease, comparacao_previa: comparacaoPrevia,
@@ -278,6 +295,8 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
   };
   await gravarJSON(path.join(pasta, 'relatorio.json'), relatorio);
   await fsp.writeFile(path.join(pasta, 'LEIA_ANTES.txt'), 'SIMULAÇÃO APENAS. NÃO INSTALE ESTE ZIP SEM REVISAR.\r\nO ZIP da pasta de mods não foi modificado.\r\nRevise o relatorio.json antes de qualquer substituição.\r\nA pasta suas_versoes (quando existe) guarda a sua versão dos arquivos em conflito.\r\n', 'utf8');
+  const emTexto = textoDosConflitos([...r.conflitos, ...r.brBlocos]);
+  if (emTexto) await fsp.writeFile(path.join(pasta, 'conflitos.txt'), '\uFEFF' + emTexto, 'utf8');
   if (!relatorio.original_intacto) throw new Error('O mod instalado mudou durante a simulação (outro programa mexeu no arquivo). Confira antes de continuar.');
   return { ...relatorio, pasta };
 }
