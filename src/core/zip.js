@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const yauzl = require('yauzl');
 const yazl = require('yazl');
 
-const MAX_EXPANDIDO = 500 * 1024 * 1024;
+const MAX_EXPANDIDO = 2 * 1024 * 1024 * 1024;
 
 function nomeSeguro(n) {
   const s = n.replace(/\\/g, '/');
@@ -24,7 +24,7 @@ function abrir(fonte) {
       const mapa = new Map(), entradas = [];
       zip.on('error', e2 => erro(new Error('ZIP inválido: ' + e2.message)));
       zip.on('entry', ent => {
-        if (!/\/$/.test(ent.fileName)) { entradas.push({ nome: ent.fileName, tamanho: ent.uncompressedSize }); mapa.set(ent.fileName, ent); }
+        if (!/\/$/.test(ent.fileName)) { entradas.push({ nome: ent.fileName, tamanho: ent.uncompressedSize, crc: ent.crc32 >>> 0 }); mapa.set(ent.fileName, ent); }
         zip.readEntry();
       });
       zip.on('end', () => ok({
@@ -50,19 +50,36 @@ function abrir(fonte) {
   });
 }
 
-// Le o ZIP inteiro para a memoria: Map nome -> Buffer (so para mods de script, com limite).
-async function lerTudo(fonte, origem = 'ZIP') {
+// Le o ZIP inteiro para a memoria: Map nome -> Buffer.
+// "banco" (opcional, de bancoDe) evita descompactar de novo o que e identico a um arquivo ja lido:
+// as versoes de um mod repetem quase todos os arquivos grandes, entao isso poupa memoria e tempo.
+const chave = (crc, tamanho) => `${crc >>> 0}:${tamanho}`;
+function bancoDe(...mapas) {
+  const banco = new Map();
+  for (const m of mapas) for (const d of m.values()) banco.set(chave(zlib.crc32(d), d.length), d);
+  return banco;
+}
+async function lerTudo(fonte, origem = 'ZIP', banco = null) {
   const z = await abrir(fonte);
   try {
-    if (z.entradas.reduce((t, e) => t + e.tamanho, 0) > MAX_EXPANDIDO) throw new Error(`${origem}: excede o limite de 500 MB expandido`);
+    if (z.entradas.reduce((t, e) => t + e.tamanho, 0) > MAX_EXPANDIDO) throw new Error(`${origem}: excede o limite de 2 GB expandido`);
     const itens = new Map(), vistos = new Set();
     for (const e of z.entradas) {
       const n = nomeSeguro(e.nome);
       if (vistos.has(n.toLowerCase())) throw new Error('Nomes duplicados no ZIP: ' + n);
       vistos.add(n.toLowerCase());
-      itens.set(n, await z.ler(e.nome));
+      itens.set(n, (banco && banco.get(chave(e.crc, e.tamanho))) || await z.ler(e.nome));
     }
     return itens;
+  } finally { z.fechar(); }
+}
+// Confere um ZIP gravado contra o conteudo esperado, um arquivo por vez (sem guardar tudo na memoria).
+async function conferir(arquivo, esperado, prefixo = '') {
+  const z = await abrir(arquivo);
+  try {
+    if (z.entradas.length !== esperado.size) return false;
+    for (const e of z.entradas) { const d = esperado.get(nomeSeguro(e.nome).slice(prefixo.length)); if (!d || !d.equals(await z.ler(e.nome))) return false; }
+    return true;
   } finally { z.fechar(); }
 }
 
@@ -89,4 +106,4 @@ function gravar(destino, itens) {
   });
 }
 
-module.exports = { abrir, lerTudo, normalizarRaiz, gravar, nomeSeguro, MAX_EXPANDIDO };
+module.exports = { abrir, lerTudo, bancoDe, conferir, normalizarRaiz, gravar, nomeSeguro, MAX_EXPANDIDO };

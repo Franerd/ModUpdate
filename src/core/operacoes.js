@@ -152,12 +152,16 @@ function traducoesFaltando(preparado) {
 }
 
 // Procura no GitHub o lancamento oficial da MESMA versao instalada: e a base para saber o que voce editou.
-async function buscarBase(lista, mod, versaoLocal) {
+async function buscarBase(lista, mod, versaoLocal, pasta, banco, etapa) {
   for (const r of lista.filter(x => github.comparar(versaoLocal, x.tag_name) === 0)) {
     const { asset } = github.escolherAsset(r, mod);
     if (!asset) continue;
-    const { itens } = zip.normalizarRaiz(await zip.lerTudo(await github.baixar(asset.browser_download_url), 'versão oficial instalada'));
-    if (github.comparar(versaoLocal, pegarModDesc(itens)) === 0) return { itens, origem: `${r.tag_name} · ${asset.name}`, zip: null };
+    const arq = path.join(pasta, 'base_oficial.baixando.zip');
+    try {
+      await github.baixar(asset.browser_download_url, arq, pct => etapa(`Baixando a versão oficial ${r.tag_name}${pct >= 0 ? ` (${pct}%)` : ''}`));
+      const { itens } = zip.normalizarRaiz(await zip.lerTudo(arq, 'versão oficial instalada', banco));
+      if (github.comparar(versaoLocal, pegarModDesc(itens)) === 0) return { itens, origem: `${r.tag_name} · ${asset.name}` };
+    } finally { await fsp.rm(arq, { force: true }); }
   }
   return null;
 }
@@ -175,13 +179,11 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
   etapa('Lendo o mod instalado');
   const hashAntes = await sha256Arquivo(original);
   const { itens: seu } = zip.normalizarRaiz(await zip.lerTudo(original, 'mod instalado'));
-  const versaoLocal = pegarModDesc(seu);
+  const versaoLocal = pegarModDesc(seu), banco = zip.bancoDe(seu);
 
-  let release = { tag_name: 'PACOTE_LOCAL', html_url: '' }, baixado, asset, motivo, lista = [];
-  if (pacoteLocal) {
-    baixado = await fsp.readFile(pacoteLocal);
-    asset = { name: path.basename(pacoteLocal), browser_download_url: pacoteLocal }; motivo = 'pacote_local';
-  } else {
+  let release = { tag_name: 'PACOTE_LOCAL', html_url: '' }, asset, motivo, lista = [];
+  if (pacoteLocal) { asset = { name: path.basename(pacoteLocal), browser_download_url: pacoteLocal }; motivo = 'pacote_local'; }
+  else {
     etapa('Consultando o lançamento no GitHub');
     lista = await github.releases(slug);
     const { estavel, pre } = github.separar(lista);
@@ -189,22 +191,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
     if (!release) throw new Error(pre ? `O repositório só tem pré-lançamento (${pre.tag_name}). Marque o mod para seguir o beta e simule de novo.` : 'O repositório não tem lançamento (release) publicado');
     ({ asset, motivo } = github.escolherAsset(release, mod));
     if (!asset) throw new Error(motivo === 'sem_asset_zip' ? 'O lançamento não tem ZIP do mod (só código-fonte)' : 'O lançamento tem vários ZIPs e não dá para saber qual é o mod');
-    etapa(`Baixando ${asset.name}`);
-    baixado = await github.baixar(asset.browser_download_url);
   }
-
-  etapa('Conferindo o pacote novo');
-  const { itens: novo, prefixo } = zip.normalizarRaiz(await zip.lerTudo(baixado, 'pacote novo'));
-  const versaoNova = pegarModDesc(novo);
-  if (!versaoNova) throw new Error('O pacote novo não tem versão válida no modDesc.xml');
-
-  // base = versao oficial que voce tem instalada (para separar as suas edicoes das do autor)
-  let base = null, baseErro = '';
-  etapa('Procurando a versão oficial que você tem instalada');
-  try {
-    if (baseLocal) base = { itens: zip.normalizarRaiz(await zip.lerTudo(await fsp.readFile(baseLocal), 'base local')).itens, origem: 'arquivo local · ' + path.basename(baseLocal) };
-    else if (!pacoteLocal) base = await buscarBase(lista, mod, versaoLocal);
-  } catch (e) { baseErro = e.message; }
 
   await fsp.mkdir(mods.destino(pastaTrabalho, 'Simulacoes'), { recursive: true });
   let pasta;   // uma pasta nova por simulacao: nunca reaproveita uma existente
@@ -212,7 +199,26 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
     pasta = mods.destino(pastaTrabalho, 'Simulacoes', `${mod.replace(/\.zip$/i, '')}_${mods.carimbo(new Date(t))}`);
     try { await fsp.mkdir(pasta); break; } catch (e) { if (e.code !== 'EEXIST') throw e; }
   }
-  await fsp.writeFile(path.join(pasta, 'release_original.zip'), baixado);
+  try { return await montar(); }
+  catch (e) { if (!fs.existsSync(path.join(pasta, 'relatorio.json'))) await fsp.rm(pasta, { recursive: true, force: true }); throw e; }   // simulacao que nao terminou nao deixa pasta pela metade
+
+  async function montar() {
+  const pacote = path.join(pasta, 'release_original.zip');
+  if (pacoteLocal) await fsp.copyFile(pacoteLocal, pacote);
+  else await github.baixar(asset.browser_download_url, pacote, pct => etapa(`Baixando ${asset.name}${pct >= 0 ? ` (${pct}%)` : ''}`));
+
+  etapa('Conferindo o pacote novo');
+  const { itens: novo, prefixo } = zip.normalizarRaiz(await zip.lerTudo(pacote, 'pacote novo', banco));
+  const versaoNova = pegarModDesc(novo);
+  if (!versaoNova) throw new Error('O pacote novo não tem versão válida no modDesc.xml');
+
+  // base = versao oficial que voce tem instalada (para separar as suas edicoes das do autor)
+  let base = null, baseErro = '';
+  etapa('Procurando a versão oficial que você tem instalada');
+  try {
+    if (baseLocal) base = { itens: zip.normalizarRaiz(await zip.lerTudo(baseLocal, 'base local', banco)).itens, origem: 'arquivo local · ' + path.basename(baseLocal) };
+    else if (!pacoteLocal) base = await buscarBase(lista, mod, versaoLocal, pasta, zip.bancoDe(seu, novo), etapa);
+  } catch (e) { baseErro = e.message; }
 
   etapa('Aplicando as suas edições sobre a versão nova');
   const preparado = new Map(novo);
@@ -272,8 +278,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
   etapa('Gerando o ZIP de prévia');
   const previa = path.join(pasta, `${mod.replace(/\.zip$/i, '')}_PREVIA_NAO_INSTALAR.zip`);
   await zip.gravar(previa, preparado);
-  const { itens: conferido } = zip.normalizarRaiz(await zip.lerTudo(previa, 'prévia'));
-  if (conferido.size !== preparado.size || [...preparado].some(([n, d]) => !conferido.has(n) || !conferido.get(n).equals(d))) throw new Error('Falha na conferência de integridade da prévia');
+  if (!await zip.conferir(previa, preparado)) throw new Error('Falha na conferência de integridade da prévia');
 
   const hashDepois = await sha256Arquivo(original);
   const revisar = r.conflitos.length || (!base && sensiveis.length) || motivo === 'unico_zip_validar_nome';
@@ -303,6 +308,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
   if (emTexto) await fsp.writeFile(path.join(pasta, 'conflitos.txt'), '\uFEFF' + emTexto, 'utf8');
   if (!relatorio.original_intacto) throw new Error('O mod instalado mudou durante a simulação (outro programa mexeu no arquivo). Confira antes de continuar.');
   return { ...relatorio, pasta };
+  }
 }
 
 async function listarSimulacoes(pastaTrabalho) {

@@ -1,6 +1,7 @@
 // Consultas ao GitHub. Erro de consulta (limite, rede) nunca vira "mod desatualizado":
 // quem chama recebe um erro com .tipo e decide mostrar "indisponível".
-const MAX_DOWNLOAD = 120 * 1024 * 1024;
+const fs = require('fs');
+const MAX_DOWNLOAD = 1024 * 1024 * 1024;
 let token = null, agente = 'ModUpdate';
 let limite = { restante: null, total: null, renovaEm: null };
 
@@ -63,12 +64,24 @@ function escolherAsset(release, mod) {
   return { asset: null, motivo: 'multiplos_assets_ambiguos' };
 }
 
-async function baixar(url) {
-  const res = await pedir(url, { json: false, timeout: 120000 });
-  if (+res.headers.get('content-length') > MAX_DOWNLOAD) throw new Error('Download grande demais (mais de 120 MB)');
-  const partes = []; let total = 0;
-  for await (const c of res.body) { total += c.length; if (total > MAX_DOWNLOAD) throw new Error('Download ultrapassou o limite de 120 MB'); partes.push(c); }
-  return Buffer.concat(partes);
+// Baixa direto para um arquivo (nao guarda na memoria). andamento(pct) e chamado a cada 1%.
+async function baixar(url, destino, andamento = () => {}) {
+  const res = await pedir(url, { json: false, timeout: 30 * 60000 });
+  const total = +res.headers.get('content-length') || 0;
+  if (total > MAX_DOWNLOAD) throw new Error('Download grande demais (mais de 1 GB)');
+  const saida = fs.createWriteStream(destino);
+  let lido = 0, ultimo = -1;
+  try {
+    for await (const c of res.body) {
+      lido += c.length;
+      if (lido > MAX_DOWNLOAD) throw new Error('Download ultrapassou o limite de 1 GB');
+      if (!saida.write(c)) await new Promise(ok => saida.once('drain', ok));
+      const pct = total ? Math.floor(lido / total * 100) : -1;
+      if (pct !== ultimo) { ultimo = pct; andamento(pct, lido); }
+    }
+  } catch (e) { saida.destroy(); fs.rmSync(destino, { force: true }); throw e.tipo ? e : new Error('O download foi interrompido: ' + e.message); }
+  await new Promise((ok, erro) => saida.end(e => e ? erro(e) : ok()));
+  return destino;
 }
 
 // "v1.3.0.7", "FS25_1.2.0.0", "release-8.0.0.1" -> [1,3,0,7]; null se nao der para ler
