@@ -214,7 +214,14 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
   if (base) {
     for (const [n, d] of seu) {
       const b = base.itens.get(n), editado = !b || !b.equals(d);
-      if (mods.RE_BR.test(n)) { if (editado || !acharNovo(n)) usarBR(n, d); if (editado) r.suas[b ? 'alterados' : 'adicionados'].push(n); continue; }
+      if (mods.RE_BR.test(n)) {
+        // traducao: se o autor tambem mexeu no arquivo BR, tenta juntar (a sua + os textos novos dele); se nao der, fica a sua
+        const nv = novo.get(n), junto = editado && b && nv && !nv.equals(b) && !nv.equals(d) && ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
+        if (junto) { preparado.set(n, junto); r.mescladas.push(n); r.brPreservadas.push(n); }
+        else if (editado || !acharNovo(n)) usarBR(n, d);
+        if (editado) r.suas[b ? 'alterados' : 'adicionados'].push(n);
+        continue;
+      }
       if (!editado) continue;                                   // voce nao mexeu: fica o do pacote novo
       r.suas[b ? 'alterados' : 'adicionados'].push(n);
       const nv = novo.get(n);

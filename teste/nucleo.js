@@ -65,5 +65,14 @@ const en = extra => `<l10n><texts><text name="a" text="A"/>${extra}</texts></l10
   assert.strictEqual(github.comparar('2.0.0.0', 'release-1.9'), 1); assert.strictEqual(github.comparar('1.0', 'latest'), null);
   assert.strictEqual(github.escolherAsset({ assets: [{ name: 'FS25_Ficticio.zip' }, { name: 'docs.zip' }] }, 'FS25_Ficticio.zip').motivo, 'nome_exato');
   assert.strictEqual(github.escolherAsset({ assets: [{ name: 'a.zip' }, { name: 'b.zip' }] }, 'FS25_Ficticio.zip').asset, null);
+  // traducao BR editada por voce e pelo autor em linhas diferentes: junta as duas
+  const br = (a, z) => B(['<l10n>', `<text name="a" text="${a}"/>`, '<text name="b" text="B"/>', '<text name="c" text="C"/>', `<text name="z" text="${z}"/>`, '</l10n>', ''].join('\n'));
+  const m2 = [['modDesc.xml', B(desc('1.0.0.0'))], ['l10n/l10n_br.xml', br('A', 'Z')]];
+  await zip.gravar(path.join(pacotes, 'b2.zip'), new Map(m2));
+  await zip.gravar(path.join(pastaMods, 'FS25_Dois.zip'), new Map([m2[0], ['l10n/l10n_br.xml', br('MINHA', 'Z')]]));
+  await zip.gravar(path.join(pacotes, 'n2.zip'), new Map([['modDesc.xml', B(desc('1.0.1.0'))], ['l10n/l10n_br.xml', br('A', 'AUTOR')]]));
+  const t = await ops.simular({ pastaMods, pastaTrabalho: trabalho, mod: 'FS25_Dois.zip', repo: 'a/b', pacoteLocal: path.join(pacotes, 'n2.zip'), baseLocal: path.join(pacotes, 'b2.zip') });
+  assert.deepStrictEqual(t.edicoes_mescladas, ['l10n/l10n_br.xml']); assert.strictEqual(t.status, 'PREVIA_GERADA_REVISAR');
+  assert.ok((await zip.lerTudo(t.preview)).get('l10n/l10n_br.xml').equals(br('MINHA', 'AUTOR')));
   console.log('nucleo: tudo certo');
 })().catch(e => { console.error('FALHOU:', e); process.exit(1); });

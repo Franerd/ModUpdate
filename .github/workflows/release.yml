@@ -12,6 +12,9 @@ on:
         type: choice
         options: [teste, estavel]
         default: teste
+  # enviar o codigo para o ramo lancar-teste (ou lancar-estavel) tambem publica
+  push:
+    branches: [lancar-teste, lancar-estavel]
 
 permissions:
   contents: write
@@ -29,4 +32,4 @@ jobs:
       - run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EP_PRE_RELEASE: ${{ inputs.canal == 'teste' && 'true' || 'false' }}
+          EP_PRE_RELEASE: ${{ (inputs.canal || (github.ref_name == 'lancar-estavel' && 'estavel' || 'teste')) == 'teste' && 'true' || 'false' }}
