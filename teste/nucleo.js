@@ -76,6 +76,15 @@ const en = extra => `<l10n><texts><text name="a" text="A"/>${extra}</texts></l10
   const t = await ops.simular({ pastaMods, pastaTrabalho: trabalho, mod: 'FS25_Dois.zip', repo: 'a/b', pacoteLocal: path.join(pacotes, 'n2.zip'), baseLocal: path.join(pacotes, 'b2.zip') });
   assert.deepStrictEqual(t.edicoes_mescladas, ['l10n/l10n_br.xml']); assert.strictEqual(t.status, 'PREVIA_GERADA_REVISAR');
   assert.ok((await zip.lerTudo(t.preview)).get('l10n/l10n_br.xml').equals(br('MINHA', 'AUTOR')));
+  // fim de linha: o seu arquivo em CRLF e o do autor em LF nao viram conflito nem "edicao"
+  const crlf = t => B(t.replace(/\n/g, '\r\n'));
+  const m3 = [['modDesc.xml', B(desc('1.0.0.0'))], ['a.lua', B(lua('b', 'h'))], ['b.lua', B(lua('b', 'h'))]];
+  await zip.gravar(path.join(pacotes, 'b3.zip'), new Map(m3));
+  await zip.gravar(path.join(pastaMods, 'FS25_Tres.zip'), new Map([m3[0], ['a.lua', crlf(lua('b', 'h'))], ['b.lua', crlf(lua('MEU', 'h'))]]));
+  await zip.gravar(path.join(pacotes, 'n3.zip'), new Map([['modDesc.xml', B(desc('1.0.1.0'))], ['a.lua', B(lua('b', 'AUTOR'))], ['b.lua', B(lua('b', 'AUTOR'))]]));
+  const u = await ops.simular({ pastaMods, pastaTrabalho: trabalho, mod: 'FS25_Tres.zip', repo: 'a/b', pacoteLocal: path.join(pacotes, 'n3.zip'), baseLocal: path.join(pacotes, 'b3.zip') });
+  assert.deepStrictEqual([u.suas_edicoes.alterados, u.edicoes_mescladas, u.conflitos_de_edicao], [['b.lua'], ['b.lua'], []]);
+  assert.strictEqual((await zip.lerTudo(u.preview)).get('b.lua').toString(), lua('MEU', 'AUTOR'));
   // pre-lancamentos: o beta so vale se for mais novo que o estavel, e so e alvo quando o mod segue o beta
   const rel = (tag, data, pre) => ({ tag_name: tag, published_at: data, prerelease: pre, assets: [{ name: 'FS25_X.zip' }] });
   const sep = github.separar([rel('v0.9', '2026-01-01', true), rel('v0.12.0.0', '2026-06-01', true), rel('v0.10.0.8', '2026-03-01', false)]);

@@ -114,7 +114,12 @@ function diferencas(antigo, novo) {
 const pegarModDesc = itens => { for (const [n, d] of itens) if (n.toLowerCase() === 'moddesc.xml') return mods.versaoDoModDesc(mods.texto(d)); return ''; };
 const EXT_MESCLAVEL = new Set(['.xml', '.lua', '.i3d', '.txt', '.md', '.json', '.cfg', '.ini', '.yml', '.yaml', '.gui']);
 const ehTexto = (n, ...bufs) => EXT_MESCLAVEL.has(path.extname(n).toLowerCase()) && bufs.every(b => !b.includes(0));
-const linhas = b => b.toString('utf8').split(/(?<=\n)/);
+// Fim de linha (CRLF do Windows x LF) nao conta como edicao: editores trocam isso sozinhos e o arquivo
+// inteiro pareceria alterado. A comparacao e a mescla ignoram o fim de linha; o resultado usa o do autor.
+const norm = b => b.toString('utf8').replace(/\r\n/g, '\n');
+const linhas = b => norm(b).split('\n');
+const fimDeLinha = b => b.includes('\r\n') ? '\r\n' : '\n';
+const igual = (n, x, y) => x.equals(y) || (ehTexto(n, x, y) && norm(x) === norm(y));
 
 // Junta a sua edicao com a mudanca do autor, linha a linha.
 // Devolve { junto } quando da para juntar, ou { blocos } com cada trecho em que os dois mexeram:
@@ -122,8 +127,8 @@ const linhas = b => b.toString('utf8').split(/(?<=\n)/);
 function mesclar(seu, base, novo) {
   const regioes = diff3Merge(linhas(seu), linhas(base), linhas(novo), { excludeFalseConflicts: true });
   const conf = regioes.filter(b => b.conflict).map(b => b.conflict);
-  if (!conf.length) return { junto: Buffer.from(regioes.map(b => b.ok.join('')).join(''), 'utf8') };
-  const corta = l => l.slice(0, 80).map(x => x.replace(/\r?\n$/, '').slice(0, 400)).concat(l.length > 80 ? [`… (+${l.length - 80} linhas)`] : []);
+  if (!conf.length) return { junto: Buffer.from(regioes.flatMap(b => b.ok).join(fimDeLinha(novo)), 'utf8') };
+  const corta = l => l.slice(0, 80).map(x => x.slice(0, 400)).concat(l.length > 80 ? [`… (+${l.length - 80} linhas)`] : []);
   return {
     totalBlocos: conf.length,
     blocos: conf.slice(0, 30).map(c => ({ linhaOriginal: c.oIndex + 1, linhaSua: c.aIndex + 1, linhaAutor: c.bIndex + 1, original: corta(c.o), seu: corta(c.a), autor: corta(c.b) })),
@@ -236,10 +241,10 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
 
   if (base) {
     for (const [n, d] of seu) {
-      const b = base.itens.get(n), editado = !b || !b.equals(d);
+      const b = base.itens.get(n), editado = !b || !igual(n, b, d);
       if (mods.RE_BR.test(n)) {
         // traducao: se o autor tambem mexeu no arquivo BR, tenta juntar (a sua + os textos novos dele); se nao der, fica a sua
-        const nv = novo.get(n), m = editado && b && nv && !nv.equals(b) && !nv.equals(d) && ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
+        const nv = novo.get(n), m = editado && b && nv && !igual(n, nv, b) && !igual(n, nv, d) && ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
         if (m && m.junto) { preparado.set(n, m.junto); r.mescladas.push(n); r.brPreservadas.push(n); }
         else if (editado || !acharNovo(n)) {
           usarBR(n, d);
@@ -251,12 +256,12 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, paco
       if (!editado) continue;                                   // voce nao mexeu: fica o do pacote novo
       r.suas[b ? 'alterados' : 'adicionados'].push(n);
       const nv = novo.get(n);
-      if (nv && nv.equals(d)) continue;                         // o autor chegou no mesmo resultado
+      if (nv && igual(n, nv, d)) continue;                      // o autor chegou no mesmo resultado
       if (!b) {                                                 // arquivo que voce adicionou
         if (!nv) { preparado.set(n, d); r.mantidas.push(n); }
         else { r.conflitos.push({ arquivo: n, motivo: 'você adicionou este arquivo e a versão nova também traz um com o mesmo nome' }); await guardarSua(n, d); }
       } else if (!nv) { r.conflitos.push({ arquivo: n, motivo: 'você editou, mas o autor removeu este arquivo na versão nova' }); await guardarSua(n, d); }
-      else if (nv.equals(b)) { preparado.set(n, d); r.mantidas.push(n); }       // so voce mexeu
+      else if (igual(n, nv, b)) { preparado.set(n, d); r.mantidas.push(n); }    // so voce mexeu
       else {                                                    // os dois mexeram
         const m = ehTexto(n, d, b, nv) ? mesclar(d, b, nv) : null;
         if (m && m.junto) { preparado.set(n, m.junto); r.mescladas.push(n); }
