@@ -33,9 +33,11 @@ async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, pr
         let r;
         if (limiteAtingido) r = { erro: limiteAtingido, tipo: 'limite' };
         else try {
-          const repo = await github.repositorio(slug);
+          // uma consulta por repositorio (o limite sem token e 60 por hora); a segunda so quando nao ha lancamento,
+          // para separar "sem lancamento" de "repositorio nao existe mais"
           const rel = await github.ultimaRelease(slug);
-          r = { ultimoPush: repo.pushed_at || '', arquivado: !!repo.archived, release: rel && { tag: rel.tag_name, url: rel.html_url, data: rel.published_at, assets: rel.assets || [] } };
+          if (!rel) await github.repositorio(slug);
+          r = { release: rel && { tag: rel.tag_name, url: rel.html_url, data: rel.published_at, assets: rel.assets || [] } };
         } catch (e) {
           r = { erro: e.message, tipo: e.tipo };
           if (e.tipo === 'limite') limiteAtingido = e.message;
@@ -43,7 +45,6 @@ async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, pr
         cache.set(slug, r);
       }
       const r = cache.get(slug);
-      Object.assign(l, { ultimoPush: r.ultimoPush || '', arquivado: !!r.arquivado });
       if (r.erro) { l.status = r.tipo === 'nao_encontrado' ? 'repo_nao_encontrado' : 'indisponivel'; l.erro = r.erro; }
       else if (!r.release) l.status = 'sem_release';
       else {
@@ -59,7 +60,7 @@ async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, pr
   const resultado = { feitaEm: new Date().toISOString(), online, limite: github.limite(), linhas };
   await fsp.mkdir(pastaTrabalho, { recursive: true });
   await gravarJSON(mods.destino(pastaTrabalho, 'Auditoria_ultima.json'), resultado);
-  const col = ['mod', 'repo', 'status', 'versaoLocal', 'tag', 'dataRelease', 'asset', 'assetMotivo', 'ultimoPush', 'erro'];
+  const col = ['mod', 'repo', 'status', 'versaoLocal', 'tag', 'dataRelease', 'asset', 'assetMotivo', 'erro'];
   const csv = [col.join(';'), ...linhas.map(l => col.map(k => `"${String(l[k] ?? '').replace(/"/g, '""')}"`).join(';')), ''].join('\r\n');
   const relatorio = mods.destino(pastaTrabalho, `Auditoria_${mods.carimbo()}.csv`);
   await fsp.writeFile(relatorio, '﻿' + csv, 'utf8');
