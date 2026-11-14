@@ -75,13 +75,20 @@ const enviar = (canal, d) => { if (janela && !janela.isDestroyed()) janela.webCo
 const log = (texto, tipo = 'info') => enviar('log', { texto, tipo, hora: new Date().toLocaleTimeString('pt-BR') });
 const comLog = (canal, f) => ipcMain.handle(canal, async (_, ...a) => { try { return await f(...a); } catch (e) { log(e.message, 'erro'); throw e; } });
 
+// ultima auditoria com o alvo de cada mod conforme a sua escolha atual (estavel ou beta), sem consultar a rede
+async function auditoriaNoCanal(pt) {
+  const a = await ops.ultimaAuditoria(pt); if (!a) return null;
+  const beta = new Map(lerCatalogo().map(c => [c.mod.toLowerCase(), !!c.beta]));
+  a.linhas.forEach(l => ops.aplicarCanal(l, !!beta.get(l.mod.toLowerCase())));
+  return a;
+}
 async function estado() {
   const pm = pastaMods(), pt = pastaTrabalho();
   let zips = []; try { zips = (await fsp.readdir(pm.pasta)).filter(n => /\.zip$/i.test(n)); } catch (_) {}
   return {
     versao: app.getVersion(), cfg: config(), pastaMods: pm, pastaTrabalho: pt, zips,
     catalogo: lerCatalogo(), sugestoes: lerJSON(dados('sugestoes.json'), []),
-    auditoria: await ops.ultimaAuditoria(pt), simulacoes: await ops.listarSimulacoes(pt),
+    auditoria: await auditoriaNoCanal(pt), simulacoes: await ops.listarSimulacoes(pt),
     limite: github.limite(), temToken: github.temToken(), admin: !!chaveAdmin.ler(),
   };
 }
@@ -138,6 +145,11 @@ comLog('catalogo:importar', async () => {
   return { ...(await estado()), novos };
 });
 comLog('catalogo:adicionar', async item => { somarCatalogo([item]); return estado(); });
+comLog('catalogo:beta', async ({ mod, beta }) => {
+  gravarJSON(dados('catalogo.json'), lerCatalogo().map(c => c.mod === mod ? { ...c, beta: !!beta } : c));
+  log(`${mod}: ${beta ? 'seguindo pré-lançamentos (beta)' : 'voltou a seguir só lançamentos estáveis'}`);
+  return estado();
+});
 comLog('catalogo:remover', async mod => { gravarJSON(dados('catalogo.json'), lerCatalogo().filter(c => c.mod.toLowerCase() !== String(mod).toLowerCase())); return estado(); });
 
 // ---------- operacoes ----------
@@ -160,7 +172,7 @@ comLog('simular', async mod => {
   const c = contexto(), item = c.catalogo.find(x => x.mod === mod);
   if (!item) throw new Error('Mod fora do catálogo: ' + mod);
   log(`Simulando a atualização de ${mod}`);
-  const relatorio = await ops.simular({ ...c, mod, repo: item.repo }, etapa => enviar('progresso', { etapa, nome: mod.replace(/\.zip$/i, '') }));
+  const relatorio = await ops.simular({ ...c, mod, repo: item.repo, beta: !!item.beta }, etapa => enviar('progresso', { etapa, nome: mod.replace(/\.zip$/i, '') }));
   const conf = relatorio.conflitos_de_edicao.length;
   log(`${mod}: ${relatorio.version_local} → ${relatorio.version_remota_moddesc} · ${relatorio.base_oficial ? `${conf} conflito(s)` : 'sem versão oficial para comparar'} · mod instalado intacto`, conf || !relatorio.base_oficial ? 'aviso' : 'ok');
   return { relatorio, simulacoes: await ops.listarSimulacoes(c.pastaTrabalho), limite: github.limite() };

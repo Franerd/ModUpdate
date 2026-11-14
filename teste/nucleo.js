@@ -76,5 +76,14 @@ const en = extra => `<l10n><texts><text name="a" text="A"/>${extra}</texts></l10
   const t = await ops.simular({ pastaMods, pastaTrabalho: trabalho, mod: 'FS25_Dois.zip', repo: 'a/b', pacoteLocal: path.join(pacotes, 'n2.zip'), baseLocal: path.join(pacotes, 'b2.zip') });
   assert.deepStrictEqual(t.edicoes_mescladas, ['l10n/l10n_br.xml']); assert.strictEqual(t.status, 'PREVIA_GERADA_REVISAR');
   assert.ok((await zip.lerTudo(t.preview)).get('l10n/l10n_br.xml').equals(br('MINHA', 'AUTOR')));
+  // pre-lancamentos: o beta so vale se for mais novo que o estavel, e so e alvo quando o mod segue o beta
+  const rel = (tag, data, pre) => ({ tag_name: tag, published_at: data, prerelease: pre, assets: [{ name: 'FS25_X.zip' }] });
+  const sep = github.separar([rel('v0.9', '2026-01-01', true), rel('v0.12.0.0', '2026-06-01', true), rel('v0.10.0.8', '2026-03-01', false)]);
+  assert.strictEqual(sep.estavel.tag_name, 'v0.10.0.8'); assert.strictEqual(sep.pre.tag_name, 'v0.12.0.0');
+  assert.strictEqual(github.separar([rel('v1', '2026-03-01', false), rel('v0.9', '2026-01-01', true)]).pre, null);
+  const lin = () => ({ versaoLocal: '0.10.0.8', estavel: { tag: 'v0.10.0.8', asset: 'a.zip' }, pre: { tag: 'v0.12.0.0', asset: 'a.zip' } });
+  const semBeta = ops.aplicarCanal(lin(), false), comBeta = ops.aplicarCanal(lin(), true);
+  assert.deepStrictEqual([semBeta.status, semBeta.tag, semBeta.tagBeta], ['em_dia', 'v0.10.0.8', 'v0.12.0.0']);
+  assert.deepStrictEqual([comBeta.status, comBeta.tag, comBeta.usandoBeta], ['atualizacao', 'v0.12.0.0', true]);
   console.log('nucleo: tudo certo');
 })().catch(e => { console.error('FALHOU:', e); process.exit(1); });

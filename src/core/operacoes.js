@@ -16,6 +16,20 @@ const sha256Arquivo = arq => new Promise((ok, erro) => {
 });
 const gravarJSON = (arq, d) => fsp.writeFile(arq, JSON.stringify(d, null, 2), 'utf8');
 
+// Define o alvo de um mod ja consultado: o lancamento estavel ou, se voce marcou o mod para seguir
+// pre-lancamentos (beta), o pre-lancamento mais novo. Nao consulta a rede.
+function aplicarCanal(l, beta) {
+  if (!('estavel' in l)) return l;
+  const alvo = beta && l.pre ? l.pre : l.estavel;
+  Object.assign(l, { beta, usandoBeta: beta && !!l.pre, tagBeta: !beta && l.pre ? l.pre.tag : '', tag: '', urlRelease: '', dataRelease: '', asset: '', assetMotivo: '' });
+  if (!alvo) { l.status = 'sem_release'; return l; }
+  Object.assign(l, { tag: alvo.tag, urlRelease: alvo.url, dataRelease: alvo.data, asset: alvo.asset, assetMotivo: alvo.assetMotivo });
+  const cmp = github.comparar(l.versaoLocal, alvo.tag);
+  l.status = cmp === null ? 'conferir' : cmp < 0 ? 'atualizacao' : 'em_dia';
+  if (!alvo.asset && l.status !== 'em_dia') l.status = 'sem_zip';
+  return l;
+}
+
 // ---------- auditoria ----------
 // status: ausente | indisponivel | repo_nao_encontrado | sem_release | sem_zip | em_dia | atualizacao | conferir | nao_verificado
 async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, progresso = () => {}) {
@@ -32,27 +46,16 @@ async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, pr
       if (!cache.has(slug)) {
         let r;
         if (limiteAtingido) r = { erro: limiteAtingido, tipo: 'limite' };
-        else try {
-          // uma consulta por repositorio (o limite sem token e 60 por hora); a segunda so quando nao ha lancamento,
-          // para separar "sem lancamento" de "repositorio nao existe mais"
-          const rel = await github.ultimaRelease(slug);
-          if (!rel) await github.repositorio(slug);
-          r = { release: rel && { tag: rel.tag_name, url: rel.html_url, data: rel.published_at, assets: rel.assets || [] } };
-        } catch (e) {
-          r = { erro: e.message, tipo: e.tipo };
-          if (e.tipo === 'limite') limiteAtingido = e.message;
-        }
+        else try { r = github.separar(await github.releases(slug)); }   // uma consulta por repositorio
+        catch (e) { r = { erro: e.message, tipo: e.tipo }; if (e.tipo === 'limite') limiteAtingido = e.message; }
         cache.set(slug, r);
       }
       const r = cache.get(slug);
       if (r.erro) { l.status = r.tipo === 'nao_encontrado' ? 'repo_nao_encontrado' : 'indisponivel'; l.erro = r.erro; }
-      else if (!r.release) l.status = 'sem_release';
       else {
-        const { asset, motivo } = github.escolherAsset(r.release, c.mod);
-        Object.assign(l, { tag: r.release.tag, urlRelease: r.release.url, dataRelease: r.release.data, asset: asset ? asset.name : '', assetMotivo: motivo });
-        const cmp = github.comparar(local.versao, r.release.tag);
-        l.status = cmp === null ? 'conferir' : cmp < 0 ? 'atualizacao' : 'em_dia';
-        if (!asset && l.status !== 'em_dia') l.status = 'sem_zip';
+        const resumo = rel => { if (!rel) return null; const { asset, motivo } = github.escolherAsset(rel, c.mod); return { tag: rel.tag_name, url: rel.html_url, data: rel.published_at, asset: asset ? asset.name : '', assetMotivo: motivo }; };
+        l.estavel = resumo(r.estavel); l.pre = resumo(r.pre);
+        aplicarCanal(l, !!c.beta);
       }
     }
     linhas.push(l);
@@ -60,7 +63,7 @@ async function auditar({ pastaMods, pastaTrabalho, catalogo, online = true }, pr
   const resultado = { feitaEm: new Date().toISOString(), online, limite: github.limite(), linhas };
   await fsp.mkdir(pastaTrabalho, { recursive: true });
   await gravarJSON(mods.destino(pastaTrabalho, 'Auditoria_ultima.json'), resultado);
-  const col = ['mod', 'repo', 'status', 'versaoLocal', 'tag', 'dataRelease', 'asset', 'assetMotivo', 'erro'];
+  const col = ['mod', 'repo', 'status', 'versaoLocal', 'tag', 'dataRelease', 'asset', 'assetMotivo', 'tagBeta', 'erro'];
   const csv = [col.join(';'), ...linhas.map(l => col.map(k => `"${String(l[k] ?? '').replace(/"/g, '""')}"`).join(';')), ''].join('\r\n');
   const relatorio = mods.destino(pastaTrabalho, `Auditoria_${mods.carimbo()}.csv`);
   await fsp.writeFile(relatorio, '﻿' + csv, 'utf8');
@@ -149,8 +152,7 @@ function traducoesFaltando(preparado) {
 }
 
 // Procura no GitHub o lancamento oficial da MESMA versao instalada: e a base para saber o que voce editou.
-async function buscarBase(slug, mod, versaoLocal) {
-  const lista = await github.releases(slug);
+async function buscarBase(lista, mod, versaoLocal) {
   for (const r of lista.filter(x => github.comparar(versaoLocal, x.tag_name) === 0)) {
     const { asset } = github.escolherAsset(r, mod);
     if (!asset) continue;
@@ -164,7 +166,7 @@ async function buscarBase(slug, mod, versaoLocal) {
 // Com a base oficial da versao instalada: mescla de tres vias, arquivo por arquivo.
 // Sem a base: preserva so as traducoes PT-BR e lista o que mudou para revisao.
 // O mod instalado e so lido; o hash dele e conferido antes e depois.
-async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseLocal }, etapa = () => {}) {
+async function simular({ pastaMods, pastaTrabalho, mod, repo, beta = false, pacoteLocal, baseLocal }, etapa = () => {}) {
   mods.conferirTrava(pastaMods, pastaTrabalho);
   const original = path.join(pastaMods, mod);
   if (!fs.existsSync(original)) throw new Error('Mod instalado não encontrado: ' + mod);
@@ -175,14 +177,16 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
   const { itens: seu } = zip.normalizarRaiz(await zip.lerTudo(original, 'mod instalado'));
   const versaoLocal = pegarModDesc(seu);
 
-  let release = { tag_name: 'PACOTE_LOCAL', html_url: '' }, baixado, asset, motivo;
+  let release = { tag_name: 'PACOTE_LOCAL', html_url: '' }, baixado, asset, motivo, lista = [];
   if (pacoteLocal) {
     baixado = await fsp.readFile(pacoteLocal);
     asset = { name: path.basename(pacoteLocal), browser_download_url: pacoteLocal }; motivo = 'pacote_local';
   } else {
     etapa('Consultando o lançamento no GitHub');
-    release = await github.ultimaRelease(slug);
-    if (!release) throw new Error('O repositório não tem lançamento (release) publicado');
+    lista = await github.releases(slug);
+    const { estavel, pre } = github.separar(lista);
+    release = beta && pre ? pre : estavel;
+    if (!release) throw new Error(pre ? `O repositório só tem pré-lançamento (${pre.tag_name}). Marque o mod para seguir o beta e simule de novo.` : 'O repositório não tem lançamento (release) publicado');
     ({ asset, motivo } = github.escolherAsset(release, mod));
     if (!asset) throw new Error(motivo === 'sem_asset_zip' ? 'O lançamento não tem ZIP do mod (só código-fonte)' : 'O lançamento tem vários ZIPs e não dá para saber qual é o mod');
     etapa(`Baixando ${asset.name}`);
@@ -199,7 +203,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
   etapa('Procurando a versão oficial que você tem instalada');
   try {
     if (baseLocal) base = { itens: zip.normalizarRaiz(await zip.lerTudo(await fsp.readFile(baseLocal), 'base local')).itens, origem: 'arquivo local · ' + path.basename(baseLocal) };
-    else if (!pacoteLocal) base = await buscarBase(slug, mod, versaoLocal);
+    else if (!pacoteLocal) base = await buscarBase(lista, mod, versaoLocal);
   } catch (e) { baseErro = e.message; }
 
   await fsp.mkdir(mods.destino(pastaTrabalho, 'Simulacoes'), { recursive: true });
@@ -278,7 +282,7 @@ async function simular({ pastaMods, pastaTrabalho, mod, repo, pacoteLocal, baseL
     status: revisar ? 'REVISAO_OBRIGATORIA' : 'PREVIA_GERADA_REVISAR',
     mod, github: slug, feitaEm: new Date().toISOString(),
     original, original_sha256_antes: hashAntes, original_sha256_depois: hashDepois, original_intacto: hashAntes === hashDepois,
-    version_local: versaoLocal, release_tag: release.tag_name, release_url: release.html_url || '', version_remota_moddesc: versaoNova,
+    version_local: versaoLocal, release_tag: release.tag_name, release_url: release.html_url || '', pre_lancamento: !!release.prerelease, version_remota_moddesc: versaoNova,
     asset: asset.name, asset_url: asset.browser_download_url, asset_selecao: motivo, prefixo_removido_do_pacote: prefixo,
     base_oficial: base ? base.origem : null, base_erro: baseErro,
     suas_edicoes: base ? r.suas : null,
@@ -314,4 +318,4 @@ async function listarSimulacoes(pastaTrabalho) {
   return lista.sort((a, b) => b.id.slice(-15).localeCompare(a.id.slice(-15)));
 }
 
-module.exports = { auditar, ultimaAuditoria, backupBR, simular, listarSimulacoes, sha256Arquivo };
+module.exports = { aplicarCanal, auditar, ultimaAuditoria, backupBR, simular, listarSimulacoes, sha256Arquivo };

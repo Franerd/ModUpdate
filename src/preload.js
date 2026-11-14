@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   escolherPasta: chamar('dialogo:pasta'),
   abrirPasta: chamar('abrir:pasta'),
   abrirLink: chamar('abrir:link'),
-  catalogo: { procurar: chamar('catalogo:procurar'), importar: chamar('catalogo:importar'), adicionar: chamar('catalogo:adicionar'), remover: chamar('catalogo:remover') },
+  catalogo: { procurar: chamar('catalogo:procurar'), importar: chamar('catalogo:importar'), adicionar: chamar('catalogo:adicionar'), remover: chamar('catalogo:remover'), beta: chamar('catalogo:beta') },
   auditar: chamar('auditar'),
   backup: chamar('backup'),
   simular: chamar('simular'),

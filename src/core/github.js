@@ -40,6 +40,16 @@ async function ultimaRelease(slug) {
 
 async function releases(slug) { return (await pedir(`https://api.github.com/repos/${slug}/releases?per_page=100`)).json(); }
 
+// Separa a lista de lancamentos em: o estavel mais novo e o pre-lancamento (beta) mais novo.
+// O pre-lancamento so conta se saiu depois do estavel (senao ja foi superado).
+function separar(lista) {
+  const validos = (lista || []).filter(r => !r.draft).sort((x, y) => new Date(y.published_at || y.created_at) - new Date(x.published_at || x.created_at));
+  const estavel = validos.find(r => !r.prerelease) || null;
+  let pre = validos.find(r => r.prerelease) || null;
+  if (pre && estavel && validos.indexOf(pre) > validos.indexOf(estavel)) pre = null;
+  return { estavel, pre };
+}
+
 // Escolhe o ZIP do mod entre os arquivos do lancamento. Nunca usa o ZIP do codigo-fonte.
 function escolherAsset(release, mod) {
   const zips = (release.assets || []).filter(a => (a.name || '').toLowerCase().endsWith('.zip'));
@@ -77,4 +87,4 @@ function comparar(local, remota) {
   return 0;
 }
 
-module.exports = { configurar, slugDe, repositorio, ultimaRelease, releases, escolherAsset, baixar, comparar, numeros, limite: () => limite, temToken: () => !!token };
+module.exports = { configurar, slugDe, repositorio, ultimaRelease, releases, separar, escolherAsset, baixar, comparar, numeros, limite: () => limite, temToken: () => !!token };

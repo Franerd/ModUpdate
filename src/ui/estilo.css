@@ -189,7 +189,7 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 .cont dd { font-size: 38px; }
 .cont { padding: 14px 18px 12px; }
 .mods { list-style: none; padding: 0 6px 0 0; overflow-y: auto; flex: 1; min-height: 0; border-top: 1px solid var(--linha); }
-.mods li { display: grid; grid-template-columns: minmax(0, 1fr) 190px 118px 86px; gap: 12px; align-items: center; padding: 8px 0 8px 4px; border-bottom: 1px solid var(--linha); }
+.mods li { display: grid; grid-template-columns: minmax(0, 1fr) 250px 118px 86px; gap: 12px; align-items: center; padding: 8px 0 8px 4px; border-bottom: 1px solid var(--linha); }
 .mods li:hover { background: rgba(255,255,255,.02); }
 .mods .nome { display: flex; flex-direction: column; min-width: 0; }
 .mods .nome b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -243,3 +243,13 @@ summary:focus { outline: none; }
 .lado pre { margin: 0; padding: 4px 10px 8px; font: 12px/1.55 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; user-select: text; }
 .lado pre i { color: var(--apagado); font-family: var(--fonte); }
 .lado.orig { --c: var(--apagado); } .lado.seu { --c: var(--trigo); } .lado.autor { --c: #6aa8e0; }
+
+/* pre-lancamentos */
+.chip-beta { font-size: 10px; letter-spacing: .04em; color: #6aa8e0; border: 1px dashed rgba(106,168,224,.55); border-radius: 3px; padding: 0 5px; margin-left: 4px; line-height: 16px; }
+.chip-beta:hover { background: rgba(106,168,224,.14); }
+.chip-beta.ligado { color: #0c1a26; background: #6aa8e0; border-style: solid; font-weight: 700; }
+.mods .nome b { display: flex; align-items: center; }
+.mods .nome b .t, .mods .ver .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mods .nome b .br { flex: none; }
+.mods .ver { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; white-space: normal; }
+.mods .ver .chip-beta { margin-left: 0; }

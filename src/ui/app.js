@@ -67,13 +67,16 @@ function desenhar() {
   const ordem = ['atualizacao', 'conferir', 'sem_zip', 'indisponivel', 'repo_nao_encontrado', 'sem_release', 'nao_verificado', 'em_dia', 'ausente'];
   itens.sort((a, b) => ordem.indexOf(a.status) - ordem.indexOf(b.status) || a.mod.toLowerCase().localeCompare(b.mod.toLowerCase()));
   $('listaMods').innerHTML = itens.map(i => `<li>
-      <span class="nome"><b title="${esc(i.mod)}">${esc(semZip(i.mod))}${(i.br || []).length ? `<span class="br" title="${esc(i.br.join('\n'))}">PT-BR</span>` : ''}</b>
+      <span class="nome"><b title="${esc(i.mod)}"><span class="t">${esc(semZip(i.mod))}</span>${(i.br || []).length ? `<span class="br" title="${esc(i.br.join('\n'))}">PT-BR</span>` : ''}</b>
         <button data-link="${esc(i.repo)}" title="Abrir no GitHub">${esc(i.repo.replace(/^https?:\/\/github\.com\//i, ''))}</button></span>
-      <span class="ver" title="${esc(i.erro || '')}">${i.versaoLocal ? `<b>${esc(i.versaoLocal)}</b>` : '—'}${i.tag ? ` → ${esc(i.tag)}${i.dataRelease ? ` · ${new Date(i.dataRelease).toLocaleDateString('pt-BR')}` : ''}` : ''}</span>
+      <span class="ver" title="${esc(i.erro || '')}"><span class="t">${i.versaoLocal ? `<b>${esc(i.versaoLocal)}</b>` : '—'}${i.tag ? ` → ${esc(i.tag)}${i.dataRelease ? ` · ${new Date(i.dataRelease).toLocaleDateString('pt-BR')}` : ''}` : ''}</span>
+        ${i.usandoBeta ? `<button class="chip-beta ligado" data-beta="${esc(i.mod)}" data-para="0" title="Este mod segue pré-lançamentos (beta). Clique para voltar a seguir só os lançamentos estáveis.">BETA</button>`
+          : i.tagBeta ? `<button class="chip-beta" data-beta="${esc(i.mod)}" data-para="1" title="Existe um pré-lançamento mais novo que o estável. Clique para este mod passar a seguir o beta.">beta ${esc(i.tagBeta)}</button>` : ''}</span>
       <span class="pilula s-${i.status}" title="${esc(i.erro || DICA[i.status] || '')}">${ROTULO[i.status] || i.status}</span>
       <button class="btn mini${i.status === 'atualizacao' ? ' primario' : ''}" data-simular="${esc(i.mod)}" ${i.status === 'ausente' || i.status === 'sem_release' || estado.ocupado ? 'disabled' : ''} title="Gera uma prévia da atualização preservando as suas edições">Simular</button>
     </li>`).join('') || `<li class="vazio">O catálogo está vazio.<br>Clique em <b>Procurar mods com GitHub</b> para o app ler a sua pasta de mods e encontrar os que têm repositório,<br>ou importe um catálogo em CSV na aba <b>Catálogo</b>.</li>`;
   $('listaMods').querySelectorAll('[data-simular]').forEach(b => b.onclick = () => simular(b.dataset.simular));
+  $('listaMods').querySelectorAll('[data-beta]').forEach(b => b.onclick = async () => aplicar(await api.catalogo.beta({ mod: b.dataset.beta, beta: b.dataset.para === '1' })));
   $('listaMods').querySelectorAll('[data-link]').forEach(b => b.onclick = () => api.abrirLink(b.dataset.link));
 
   // aba catalogo: itens do catalogo (com remover) e sugestoes (com adicionar)
@@ -149,7 +152,7 @@ function detalhe(s) {
   const e = s.suas_edicoes, nEd = e ? e.alterados.length + e.adicionados.length + e.removidos.length : null;
   const conf = s.conflitos_de_edicao || [], falt = (s.traducoes_faltando || []).reduce((t, f) => t + f.total, 0);
   $('detMod').textContent = semZip(s.mod);
-  $('detVer').innerHTML = `${esc(s.version_local || '?')} → <b>${esc(s.version_remota_moddesc)}</b> · lançamento ${esc(s.release_tag)} · ${dataHora(s.feitaEm)}`;
+  $('detVer').innerHTML = `${esc(s.version_local || '?')} → <b>${esc(s.version_remota_moddesc)}</b> · ${s.pre_lancamento ? 'pré-lançamento (beta)' : 'lançamento'} ${esc(s.release_tag)} · ${dataHora(s.feitaEm)}`;
   const revisar = s.status === 'REVISAO_OBRIGATORIA';
   $('detStatus').className = 'pilula ' + (revisar ? 's-atualizacao' : 's-em_dia'); $('detStatus').textContent = revisar ? 'Precisa de revisão' : 'Prévia limpa';
   $('detNota').className = 'det-nota' + (s.base_oficial ? '' : ' ruim');
