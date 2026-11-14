@@ -1,0 +1,32 @@
+name: Publicar versão
+
+# Gera o instalador no Windows e publica no GitHub Releases.
+#  - canal "teste": pré-lançamento. Só o app com chave de administrador recebe.
+#    Depois de aprovar, use "Promover" no Painel ADM: o FraNerdServer passa a entregar como versão oficial.
+#  - canal "estavel": lançamento normal (reserva para quando o FraNerdServer estiver fora do ar).
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: 'teste ou estavel'
+        type: choice
+        options: [teste, estavel]
+        default: teste
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npm run teste
+      - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_PRE_RELEASE: ${{ inputs.canal == 'teste' && 'true' || 'false' }}

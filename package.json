@@ -1,0 +1,59 @@
+{
+  "name": "modupdate",
+  "productName": "ModUpdate",
+  "version": "0.1.0",
+  "description": "Confere no GitHub as atualizações dos seus mods de Farming Simulator 25 e gera uma prévia que preserva a tradução PT-BR",
+  "main": "src/main.js",
+  "author": "FraNerd",
+  "license": "UNLICENSED",
+  "repository": "github:Franerd/ModUpdate",
+  "scripts": {
+    "start": "electron .",
+    "teste": "node teste/nucleo.js",
+    "dist": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "node-diff3": "^3.2.1",
+    "yauzl": "^3.2.0",
+    "yazl": "^3.3.1"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.franerd.modupdate",
+    "productName": "ModUpdate",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "ModUpdate-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "ModUpdate"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Franerd",
+        "repo": "ModUpdate",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

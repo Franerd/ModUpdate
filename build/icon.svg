@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect x="20" y="20" width="472" height="472" rx="92" fill="#e8b54a"/>
+  <!-- anel aberto em cima: o mod; seta que sobe por dentro: a atualizacao -->
+  <path d="M 172.6 196.4 A 124 124 0 1 0 339.4 196.4" fill="none" stroke="#1a1408" stroke-width="46" stroke-linecap="butt"/>
+  <path d="M 256 96 L 334 196 L 281 196 L 281 318 L 231 318 L 231 196 L 178 196 Z" fill="#1a1408"/>
+</svg>

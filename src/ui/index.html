@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>ModUpdate</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header class="barra">
+  <div class="marca"><img class="logo" src="icone.png" alt=""><span>MOD<b>UPDATE</b></span><span class="selo-sim" title="Esta versão só gera prévias: nunca grava na pasta de mods">SIMULAÇÃO</span><span class="selo-adm oculto" id="seloAdm">ADM</span></div>
+  <div class="arrastar"></div>
+  <span class="versao" id="versao"></span>
+  <button class="jan" data-jan="min" title="Minimizar"><svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg></button>
+  <button class="jan" data-jan="max" title="Maximizar"><svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+  <button class="jan fechar" data-jan="fechar" title="Fechar"><svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+</header>
+
+<main class="grade">
+  <aside class="lateral">
+    <div class="topo-lat">
+      <span class="trava" title="O app só lê a pasta de mods. Tudo o que ele grava vai para a pasta de trabalho."><i></i><em>Pasta de mods protegida</em></span>
+      <small>PASTA DE MODS</small>
+      <h1 id="nomePasta">—</h1>
+      <p id="caminhoMods">—</p>
+    </div>
+    <dl class="numeros">
+      <div><dt>Catálogo</dt><dd id="nCatalogo">–</dd></div>
+      <div><dt>Com PT-BR</dt><dd id="nBR">–</dd></div>
+      <div title="Consultas que o GitHub ainda aceita nesta hora"><dt>GitHub</dt><dd id="nLimite">–</dd></div>
+    </dl>
+    <h3 class="rotulo">Últimas simulações</h3>
+    <ul class="lista-sim" id="listaSim"><li class="vazio">Nenhuma simulação ainda</li></ul>
+    <button class="link" id="btnTrabalho">Abrir pasta de trabalho</button>
+  </aside>
+
+  <section class="painel">
+    <div class="faixa oculto" id="aviso"><span id="avisoTexto"></span><button class="btn mini primario oculto" id="avisoBtn">Reiniciar e atualizar</button></div>
+    <nav class="abas" id="abas">
+      <button class="aba-btn ativa" data-aba="abaMods">Mods</button>
+      <button class="aba-btn" data-aba="abaSug">Catálogo <span id="nSug"></span></button>
+    </nav>
+
+    <div class="aba" id="abaMods">
+      <div class="cab">
+        <div>
+          <h2>Atualizações no GitHub</h2>
+          <button class="caminho" id="ultima" title="Abrir pasta de trabalho">Ainda não verificado</button>
+        </div>
+        <div class="cab-botoes">
+          <button class="btn-adm oculto" id="btnAdmin" title="Versões do app">
+            <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>Painel ADM
+          </button>
+          <button class="icone" id="btnConfig" title="Configurações">
+            <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="contadores">
+        <div class="cont ok"><dd id="cEmDia">–</dd><dt>Em dia</dt></div>
+        <div class="cont des"><dd id="cAtual">–</dd><dt>Com atualização</dt></div>
+        <div class="cont sob"><dd id="cConferir">–</dd><dt>Para conferir</dt></div>
+        <div class="cont fal"><dd id="cFalha">–</dd><dt>Sem resposta</dt></div>
+      </div>
+
+      <ul class="mods" id="listaMods"></ul>
+
+      <div class="linha-prog">
+        <div class="prog-topo"><span id="progTexto">Pronto</span><span id="progDir"></span></div>
+        <div class="trilho"><div class="enchimento" id="progBarra"></div></div>
+      </div>
+
+      <div class="acoes">
+        <button class="btn primario" id="btnVerificar">Verificar no GitHub</button>
+        <button class="btn" id="btnBackup" title="Copia as suas traduções PT-BR para a pasta de trabalho">Backup das traduções</button>
+        <span class="espaco"></span>
+        <button class="btn" id="btnProcurar" title="Lê os mods da pasta e encontra os que têm repositório no GitHub">Procurar mods com GitHub</button>
+      </div>
+    </div>
+
+    <div class="aba oculto" id="abaSug">
+      <div class="cab">
+        <div>
+          <h2>Catálogo</h2>
+          <p class="dica">Qual repositório do GitHub corresponde a cada mod. Links encontrados fora do <b>modDesc.xml</b> ficam aqui como sugestão, porque podem ser de outro projeto.</p>
+        </div>
+        <div class="cab-botoes"><button class="btn mini" id="btnImportar" title="Importa um catálogo em CSV (Mod;Repositorio_GitHub)">Importar CSV</button></div>
+      </div>
+      <div class="novo-item">
+        <input id="novoMod" placeholder="FS25_NomeDoMod.zip" list="listaZips"><datalist id="listaZips"></datalist>
+        <input id="novoRepo" placeholder="https://github.com/autor/repositorio">
+        <button class="btn mini primario" id="btnAdicionar">Adicionar</button>
+      </div>
+      <ul class="mods sug" id="listaSug"></ul>
+    </div>
+  </section>
+</main>
+
+<footer class="log" id="log">
+  <button class="log-cab" id="logCab"><span id="logUltimo">Iniciando…</span><span class="seta">▴</span></button>
+  <ol class="log-lista" id="logLista"></ol>
+</footer>
+
+<!-- CONFIGURACOES -->
+<dialog id="dlgConfig">
+  <form method="dialog" class="cfg">
+    <h2>Configurações</h2>
+    <label>Pasta de mods <small>(só leitura: o app nunca grava aqui)</small>
+      <div class="linha"><input id="cfgMods" placeholder="Automático (gameSettings.xml do jogo)"><button type="button" class="btn mini" id="cfgModsBtn">Escolher</button></div>
+      <small id="cfgModsInfo"></small>
+    </label>
+    <label>Pasta de trabalho <small>(prévias, relatórios e backups; não pode ficar dentro da pasta de mods)</small>
+      <div class="linha"><input id="cfgTrab" placeholder="Documentos\ModUpdate"><button type="button" class="btn mini" id="cfgTrabBtn">Escolher</button></div>
+    </label>
+    <label>Token do GitHub <small>(opcional)</small>
+      <div class="linha"><input id="cfgToken" type="password" autocomplete="off" placeholder="github_pat_…"><button type="button" class="btn mini oculto" id="cfgTokenTirar">Remover</button></div>
+      <small id="cfgTokenInfo">Sem token o GitHub aceita 60 consultas por hora; com token, 5.000. Um token sem nenhuma permissão já serve. Fica só neste PC, criptografado.</small>
+    </label>
+    <details class="adm-entrada" id="admEntrada">
+      <summary>Administrador</summary>
+      <div id="admDesligado">
+        <small>Cole a chave de administrador (arquivo "ModUpdate - chave de administrador.txt" na Área de Trabalho do FraNerdServer). Com ela, este app recebe as versões de teste e libera o Painel ADM.</small>
+        <div class="linha"><input id="admChave" type="password" placeholder="mua_…"><button type="button" class="btn mini" id="admAtivar">Ativar</button></div>
+      </div>
+      <div id="admLigado" class="oculto linha centro"><span class="ok-txt">Modo administrador ativo neste PC</span><button type="button" class="btn mini" id="admDesativar">Desativar</button></div>
+      <small class="erro-txt" id="admErro"></small>
+    </details>
+    <small class="erro-txt" id="cfgErro"></small>
+    <div class="cfg-acoes"><button class="btn" value="cancelar">Cancelar</button><button type="button" class="btn primario" id="cfgSalvar">Salvar</button></div>
+  </form>
+</dialog>
+
+<!-- DETALHE DA SIMULACAO -->
+<dialog id="dlgSim" class="largo">
+  <div class="cfg">
+    <div class="det-topo">
+      <div><h2 id="detMod"></h2><p class="det-ver" id="detVer"></p></div>
+      <span class="pilula" id="detStatus"></span>
+    </div>
+    <p class="det-nota" id="detNota"></p>
+    <dl class="det-grade" id="detGrade"></dl>
+    <div id="detSecoes"></div>
+    <div class="cfg-acoes">
+      <button type="button" class="btn" id="detPasta">Abrir pasta da prévia</button>
+      <span class="espaco"></span>
+      <button type="button" class="btn primario" id="detFechar">Fechar</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- PAINEL DO ADMINISTRADOR -->
+<dialog id="dlgAdmin">
+  <div class="cfg">
+    <h2>Versões do app</h2>
+    <p class="dica">Versões novas chegam primeiro só neste app (teste). Quando estiverem boas, <b>Promover</b> passa a ser a versão oficial entregue pelo FraNerdServer. <b>Voltar versão</b> devolve a anterior.</p>
+    <div class="linha"><small class="s-info" id="verProducao">Carregando…</small><span class="espaco"></span><button type="button" class="btn mini perigo" id="verVoltar">Voltar versão</button></div>
+    <ul class="ver-lista" id="verLista"></ul>
+    <div class="cfg-acoes"><button type="button" class="btn primario" id="admFechar">Fechar</button></div>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
